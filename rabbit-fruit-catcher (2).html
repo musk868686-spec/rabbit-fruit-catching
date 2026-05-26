@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐰 Bunny Basket Blitz</title>
+<style>
+  /* ============================================================
+     GLOBAL & RESET
+  ============================================================ */
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --sky1: #a8edea;
+    --sky2: #fed6e3;
+    --ground: #5d4037;
+    --grass: #66bb6a;
+    --ui-bg: rgba(255,255,255,0.18);
+    --ui-border: rgba(255,255,255,0.45);
+    --accent: #ff6b6b;
+    --gold: #ffd700;
+    --shadow: rgba(0,0,0,0.18);
+    --font-display: 'Fredoka One', cursive;
+    --font-body: 'Nunito', sans-serif;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: var(--font-body);
+    user-select: none;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+  }
+
+  /* ============================================================
+     GAME WRAPPER
+  ============================================================ */
+  #gameWrapper {
+    position: relative;
+    width: 480px;
+    height: 680px;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 0 0 3px rgba(255,255,255,0.08);
+  }
+
+  /* ============================================================
+     ANIMATED SKY BACKGROUND
+  ============================================================ */
+  #skyBg {
+    position: absolute; inset: 0;
+    background: linear-gradient(175deg, var(--sky1) 0%, var(--sky2) 100%);
+    transition: background 1.5s ease;
+    z-index: 0;
+  }
+
+  /* Clouds */
+  .cloud {
+    position: absolute;
+    border-radius: 50px;
+    background: rgba(255,255,255,0.75);
+    filter: blur(2px);
+    animation: driftCloud linear infinite;
+  }
+  .cloud::before, .cloud::after {
+    content: '';
+    position: absolute;
+    background: inherit;
+    border-radius: 50%;
+  }
+  .cloud::before { width: 60%; height: 130%; top: -40%; left: 15%; }
+  .cloud::after  { width: 40%; height: 110%; top: -30%; right: 10%; }
+
+  @keyframes driftCloud {
+    from { transform: translateX(-180px); }
+    to   { transform: translateX(580px); }
+  }
+
+  /* Ground stripe */
+  #ground {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 64px;
+    background: linear-gradient(180deg, var(--grass) 0%, #388e3c 40%, var(--ground) 41%, #3e2723 100%);
+    z-index: 1;
+  }
+  #ground::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 14px;
+    background: repeating-linear-gradient(90deg, #81c784 0px, #81c784 18px, #66bb6a 18px, #66bb6a 36px);
+    border-radius: 4px 4px 0 0;
+  }
+
+  /* ============================================================
+     HUD
+  ============================================================ */
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.22) 0%, transparent 100%);
+    z-index: 10;
+    gap: 8px;
+  }
+
+  .hud-pill {
+    background: var(--ui-bg);
+    border: 1.5px solid var(--ui-border);
+    backdrop-filter: blur(8px);
+    border-radius: 40px;
+    padding: 6px 14px;
+    font-family: var(--font-display);
+    font-size: 15px;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .hud-pill span.val { color: var(--gold); }
+
+  #missPips {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+  .pip {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: #ff6b6b;
+    border: 2px solid rgba(255,255,255,0.6);
+    transition: background 0.3s, transform 0.3s;
+    box-shadow: 0 0 6px #ff6b6b88;
+  }
+  .pip.lost {
+    background: #333;
+    box-shadow: none;
+    border-color: rgba(255,255,255,0.2);
+  }
+
+  /* ============================================================
+     CANVAS
+  ============================================================ */
+  #gameCanvas {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+  }
+
+  /* ============================================================
+     SCREENS (Start / Game Over / Pause)
+  ============================================================ */
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+    text-align: center;
+    padding: 32px 24px;
+    transition: opacity 0.4s ease;
+  }
+  .screen.hidden { opacity: 0; pointer-events: none; }
+
+  .screen-bg {
+    position: absolute; inset: 0;
+    background: rgba(10, 10, 30, 0.72);
+    backdrop-filter: blur(6px);
+  }
+  .screen-content { position: relative; z-index: 1; }
+
+  .screen-title {
+    font-family: var(--font-display);
+    font-size: 48px;
+    color: #fff;
+    text-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 40px rgba(255,200,80,0.5);
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+  .screen-subtitle {
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 28px;
+    line-height: 1.6;
+    max-width: 300px;
+  }
+
+  .big-emoji { font-size: 72px; margin-bottom: 8px; animation: bounce 1.2s ease infinite; display: block; }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 36px;
+    border-radius: 50px;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 20px;
+    letter-spacing: 0.5px;
+    transition: transform 0.15s, box-shadow 0.15s;
+    margin: 6px;
+  }
+  .btn:hover  { transform: translateY(-3px) scale(1.04); }
+  .btn:active { transform: translateY(0) scale(0.98); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(255,107,107,0.45);
+  }
+  .btn-secondary {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 2px solid rgba(255,255,255,0.35);
+    box-shadow: none;
+    font-size: 17px;
+    padding: 11px 28px;
+  }
+
+  /* Instruction cards */
+  .instructions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 28px;
+    max-width: 320px;
+  }
+  .instr-card {
+    background: rgba(255,255,255,0.1);
+    border: 1.5px solid rgba(255,255,255,0.2);
+    border-radius: 14px;
+    padding: 12px 10px;
+    font-size: 12.5px;
+    color: rgba(255,255,255,0.85);
+  }
+  .instr-card .ic { font-size: 22px; display: block; margin-bottom: 5px; }
+
+  /* Stats row */
+  .stats-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    justify-content: center;
+  }
+  .stat-box {
+    background: rgba(255,255,255,0.1);
+    border: 1.5px solid rgba(255,255,255,0.25);
+    border-radius: 14px;
+    padding: 12px 22px;
+    color: #fff;
+  }
+  .stat-box .s-label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-box .s-val   { font-family: var(--font-display); font-size: 28px; color: var(--gold); }
+
+  .rotten-msg {
+    background: rgba(255,50,50,0.2);
+    border: 1.5px solid rgba(255,100,100,0.4);
+    border-radius: 12px;
+    padding: 10px 20px;
+    color: #ff9090;
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 18px;
+  }
+
+  /* Level up banner */
+  #levelUpBanner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%) scale(0.5);
+    background: linear-gradient(135deg, #f7971e, #ffd200);
+    color: #3a2000;
+    font-family: var(--font-display);
+    font-size: 30px;
+    padding: 16px 40px;
+    border-radius: 50px;
+    z-index: 15;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(255,200,0,0.5);
+    transition: none;
+    white-space: nowrap;
+  }
+  #levelUpBanner.pop {
+    animation: popBanner 1.6s cubic-bezier(.36,.07,.19,.97) forwards;
+  }
+  @keyframes popBanner {
+    0%   { opacity:0; transform:translate(-50%,-50%) scale(0.5); }
+    20%  { opacity:1; transform:translate(-50%,-50%) scale(1.05); }
+    80%  { opacity:1; transform:translate(-50%,-50%) scale(1); }
+    100% { opacity:0; transform:translate(-50%,-60%) scale(0.9); }
+  }
+
+  /* Pause overlay */
+  #pauseOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,10,30,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 18;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: var(--font-display);
+    font-size: 40px;
+    gap: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #pauseOverlay.visible { opacity: 1; pointer-events: all; }
+  #pauseOverlay .p-sub { font-family: var(--font-body); font-size: 16px; opacity: 0.7; }
+
+  /* ============================================================
+     MOBILE TOUCH BUTTONS
+  ============================================================ */
+  #touchControls {
+    position: absolute;
+    bottom: 70px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 12;
+    pointer-events: none;
+  }
+  .touch-btn {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    border: 2.5px solid rgba(255,255,255,0.4);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    cursor: pointer;
+    pointer-events: all;
+    transition: background 0.1s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .touch-btn:active { background: rgba(255,255,255,0.4); transform: scale(0.93); }
+
+  /* ============================================================
+     SCORE POPUPS (drawn on canvas via JS, but some via DOM)
+  ============================================================ */
+  .score-pop {
+    position: absolute;
+    font-family: var(--font-display);
+    font-size: 22px;
+    color: #fff;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    pointer-events: none;
+    z-index: 14;
+    animation: floatUp 0.9s ease forwards;
+  }
+  .score-pop.good  { color: #b9f6ca; }
+  .score-pop.rotten{ color: #ff5252; }
+  @keyframes floatUp {
+    0%   { opacity:1; transform:translateY(0) scale(1); }
+    100% { opacity:0; transform:translateY(-60px) scale(0.8); }
+  }
+</style>
+</head>
+<body>
+
+<div id="gameWrapper">
+
+  <!-- Sky & Ground -->
+  <div id="skyBg"></div>
+  <div id="ground"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-pill">⭐ <span id="hudScore" class="val">0</span></div>
+    <div class="hud-pill">🏆 <span id="hudHigh" class="val">0</span></div>
+    <div class="hud-pill">🌀 Lv<span id="hudLevel" class="val">1</span></div>
+    <div class="hud-pill" id="missPillWrap">
+      ❤️ <div id="missPips">
+        <div class="pip" id="pip0"></div>
+        <div class="pip" id="pip1"></div>
+        <div class="pip" id="pip2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Score popups container -->
+  <div id="popContainer" style="position:absolute;inset:0;pointer-events:none;z-index:14;"></div>
+
+  <!-- Level Up Banner -->
+  <div id="levelUpBanner">🎉 LEVEL UP!</div>
+
+  <!-- Pause Overlay -->
+  <div id="pauseOverlay" role="dialog" aria-label="Paused">
+    ⏸ PAUSED
+    <div class="p-sub">Press P to resume</div>
+  </div>
+
+  <!-- START SCREEN -->
+  <div class="screen" id="startScreen">
+    <div class="screen-bg"></div>
+    <div class="screen-content">
+      <span class="big-emoji">🐰</span>
+      <div class="screen-title">Bunny Basket<br>Blitz</div>
+      <div class="screen-subtitle">Catch all the fruits — but beware the rotten ones!</div>
+      <div class="instructions">
+        <div class="instr-card"><span class="ic">⬅️➡️</span>Arrow keys to move</div>
+        <div class="instr-card"><span class="ic">🍎</span>Catch good fruits</div>
+        <div class="instr-card"><span class="ic">🤢</span>Avoid rotten fruits</div>
+        <div class="instr-card"><span class="ic">P</span>Pause game</div>
+      </div>
+      <button class="btn btn-primary" id="startBtn">🚀 Start Game</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div class="screen hidden" id="gameOverScreen">
+    <div class="screen-bg"></div>
+    <div class="screen-content">
+      <span class="big-emoji" id="goEmoji">😢</span>
+      <div class="screen-title" id="goTitle">Game Over!</div>
+      <div class="rotten-msg hidden" id="rottenMsg">☠️ You caught a rotten fruit!</div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="s-label">Score</div>
+          <div class="s-val" id="goScore">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="s-label">Level</div>
+          <div class="s-val" id="goLevel">1</div>
+        </div>
+        <div class="stat-box">
+          <div class="s-label">Best</div>
+          <div class="s-val" id="goBest">0</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="restartBtn">🔄 Play Again</button>
+      <button class="btn btn-secondary" id="menuBtn">🏠 Menu</button>
+    </div>
+  </div>
+
+  <!-- Mobile Touch Buttons -->
+  <div id="touchControls">
+    <div class="touch-btn" id="leftBtn">⬅</div>
+    <div class="touch-btn" id="rightBtn">➡</div>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT
+============================================================ -->
+<script>
+/* ============================================================
+   AUDIO ENGINE  – generated tones via Web Audio API
+============================================================ */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  return audioCtx;
+}
+
+function playTone({ freq = 440, type = 'sine', duration = 0.15, volume = 0.4,
+                    freqEnd = null, attack = 0.01, decay = 0.08 } = {}) {
+  try {
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    if (freqEnd) osc.frequency.linearRampToValueAtTime(freqEnd, ctx.currentTime + duration);
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + attack);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration + 0.02);
+  } catch(e) {}
+}
+
+const SFX = {
+  catch: () => {
+    playTone({ freq: 520, freqEnd: 880, type: 'triangle', duration: 0.18, volume: 0.35 });
+    setTimeout(() => playTone({ freq: 880, freqEnd: 1200, type: 'triangle', duration: 0.14, volume: 0.25 }), 80);
+  },
+  miss: () => {
+    playTone({ freq: 300, freqEnd: 150, type: 'sawtooth', duration: 0.22, volume: 0.3 });
+  },
+  rotten: () => {
+    playTone({ freq: 200, freqEnd: 80,  type: 'sawtooth', duration: 0.35, volume: 0.5 });
+    setTimeout(() => playTone({ freq: 160, freqEnd: 60, type: 'square', duration: 0.3, volume: 0.35 }), 180);
+  },
+  gameover: () => {
+    [0,140,280,420].forEach((d,i) =>
+      setTimeout(() => playTone({ freq: 300-i*40, type:'square', duration:0.28, volume:0.3 }), d));
+  },
+  levelup: () => {
+    [523,659,784,1047].forEach((f,i) =>
+      setTimeout(() => playTone({ freq:f, type:'triangle', duration:0.2, volume:0.4 }), i*100));
+  }
+};
+
+/* ============================================================
+   CONSTANTS & CONFIG
+============================================================ */
+const CANVAS_W   = 480;
+const CANVAS_H   = 680;
+const GROUND_H   = 64;
+const HUD_H      = 56;
+const PLAY_TOP   = HUD_H;
+const PLAY_BOT   = CANVAS_H - GROUND_H;
+const MAX_MISSES = 3;
+
+// Fruit definitions
+const FRUITS = [
+  { emoji:'🍎', label:'Apple',      pts:10, color:'#e53935' },
+  { emoji:'🍌', label:'Banana',     pts:15, color:'#fdd835' },
+  { emoji:'🍊', label:'Orange',     pts:10, color:'#fb8c00' },
+  { emoji:'🍓', label:'Strawberry', pts:20, color:'#e91e63' },
+  { emoji:'🍇', label:'Grapes',     pts:25, color:'#8e24aa' },
+  { emoji:'🍑', label:'Peach',      pts:15, color:'#ef9a9a' },
+  { emoji:'🍒', label:'Cherry',     pts:20, color:'#c62828' },
+  { emoji:'🍐', label:'Pear',       pts:12, color:'#9ccc65' },
+];
+
+const ROTTEN = { emoji:'🤢', label:'Rotten', color:'#558b2f' };
+
+// Sky themes per level
+const SKY_THEMES = [
+  { a:'#a8edea', b:'#fed6e3' },  // pastel dawn
+  { a:'#f7c59f', b:'#efefd0' },  // warm noon
+  { a:'#89f7fe', b:'#66a6ff' },  // bright blue
+  { a:'#fddb92', b:'#d1fdff' },  // golden hour
+  { a:'#a18cd1', b:'#fbc2eb' },  // dusk purple
+  { a:'#2c3e50', b:'#4ca1af' },  // evening
+  { a:'#0f2027', b:'#203a43' },  // night
+];
+
+/* ============================================================
+   STATE
+============================================================ */
+let state = {};        // current game state
+let highScore = parseInt(localStorage.getItem('bbb_hs') || '0');
+let running   = false;
+let paused    = false;
+let gameStarted = false;
+let rottenCaught = false;
+let lastTime  = 0;
+let animFrame = null;
+
+/* ============================================================
+   DOM REFS
+============================================================ */
+const canvas    = document.getElementById('gameCanvas');
+const ctx       = canvas.getContext('2d');
+const skyBg     = document.getElementById('skyBg');
+const popCont   = document.getElementById('popContainer');
+const lvlBanner = document.getElementById('levelUpBanner');
+
+canvas.width  = CANVAS_W;
+canvas.height = CANVAS_H;
+
+const hudScore  = document.getElementById('hudScore');
+const hudHigh   = document.getElementById('hudHigh');
+const hudLevel  = document.getElementById('hudLevel');
+const pips      = [document.getElementById('pip0'), document.getElementById('pip1'), document.getElementById('pip2')];
+
+const startScreen    = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const startBtn       = document.getElementById('startBtn');
+const restartBtn     = document.getElementById('restartBtn');
+const menuBtn        = document.getElementById('menuBtn');
+const goScore        = document.getElementById('goScore');
+const goLevel        = document.getElementById('goLevel');
+const goBest         = document.getElementById('goBest');
+const goEmoji        = document.getElementById('goEmoji');
+const goTitle        = document.getElementById('goTitle');
+const rottenMsg      = document.getElementById('rottenMsg');
+const pauseOverlay   = document.getElementById('pauseOverlay');
+const leftBtn        = document.getElementById('leftBtn');
+const rightBtn       = document.getElementById('rightBtn');
+
+/* ============================================================
+   RABBIT ENTITY
+============================================================ */
+const RABBIT = {
+  w: 72, h: 80,
+  x: CANVAS_W / 2,
+  y: PLAY_BOT - 5,
+  speed: 5.5,
+  vx: 0,
+  wobble: 0,
+  earWobble: 0,
+};
+
+/* ============================================================
+   INIT / RESET
+============================================================ */
+function initState() {
+  state = {
+    score:  0,
+    level:  1,
+    missed: 0,
+    caught: 0,  // fruits caught this level
+    fruits: [],
+    particles: [],
+    spawnTimer: 0,
+    spawnInterval: 1600, // ms
+    baseFallSpeed: 1.8,
+  };
+  RABBIT.x = CANVAS_W / 2;
+  RABBIT.vx = 0;
+  RABBIT.wobble = 0;
+  rottenCaught = false;
+}
+
+/* ============================================================
+   SPAWN SYSTEM
+============================================================ */
+function spawnFruit(delta) {
+  state.spawnTimer += delta;
+  if (state.spawnTimer < state.spawnInterval) return;
+  state.spawnTimer = 0;
+
+  const isRotten = Math.random() < (0.08 + state.level * 0.018);
+  const def = isRotten ? ROTTEN : FRUITS[Math.floor(Math.random() * FRUITS.length)];
+  const size = 34 + Math.random() * 12;
+  const speed = state.baseFallSpeed + Math.random() * 1.2 + state.level * 0.35;
+
+  state.fruits.push({
+    x: size/2 + Math.random() * (CANVAS_W - size),
+    y: PLAY_TOP - size,
+    size,
+    speed,
+    def,
+    isRotten,
+    spin: (Math.random() - 0.5) * 0.08,
+    angle: 0,
+    wobbleSin: Math.random() * Math.PI * 2,
+    wobbleAmp: 18 + Math.random() * 18,
+    wobbleSpd: 0.04 + Math.random() * 0.03,
+  });
+}
+
+/* ============================================================
+   PARTICLES
+============================================================ */
+function spawnParticles(x, y, color, count = 10) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.5 + Math.random() * 3.5;
+    state.particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 2,
+      alpha: 1,
+      color,
+      size: 4 + Math.random() * 5,
+      life: 0.7 + Math.random() * 0.4,
+      age: 0,
+    });
+  }
+}
+
+/* ============================================================
+   SCORE POPUP
+============================================================ */
+function spawnPopup(x, y, text, good = true) {
+  const el = document.createElement('div');
+  el.className = 'score-pop ' + (good ? 'good' : 'rotten');
+  el.textContent = text;
+  el.style.left = (x - 20) + 'px';
+  el.style.top  = (y - 20) + 'px';
+  popCont.appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
+
+/* ============================================================
+   LEVEL UP
+============================================================ */
+function checkLevelUp() {
+  const threshold = 10;
+  if (state.caught >= threshold) {
+    state.caught = 0;
+    state.level++;
+    // Scale difficulty
+    state.spawnInterval = Math.max(500, 1600 - state.level * 130);
+    state.baseFallSpeed = 1.8 + state.level * 0.35;
+
+    // Update sky theme
+    const theme = SKY_THEMES[Math.min(state.level - 1, SKY_THEMES.length - 1)];
+    skyBg.style.background = `linear-gradient(175deg, ${theme.a} 0%, ${theme.b} 100%)`;
+
+    // Banner animation
+    lvlBanner.classList.remove('pop');
+    void lvlBanner.offsetWidth; // reflow
+    lvlBanner.textContent = `🎉 LEVEL ${state.level}!`;
+    lvlBanner.classList.add('pop');
+    SFX.levelup();
+    hudLevel.textContent = state.level;
+  }
+}
+
+/* ============================================================
+   HUD UPDATE
+============================================================ */
+function updateHUD() {
+  hudScore.textContent = state.score;
+  hudHigh.textContent  = Math.max(highScore, state.score);
+  hudLevel.textContent = state.level;
+  pips.forEach((p, i) => p.classList.toggle('lost', i < state.missed));
+}
+
+/* ============================================================
+   COLLISION
+============================================================ */
+const BASKET_W = 62;
+const BASKET_Y_OFFSET = 20; // basket top relative to rabbit bottom
+
+function checkCollisions() {
+  const bx = RABBIT.x;
+  const by = RABBIT.y - BASKET_Y_OFFSET;
+  const half = BASKET_W / 2;
+
+  for (let i = state.fruits.length - 1; i >= 0; i--) {
+    const f = state.fruits[i];
+    const fr = f.size / 2;
+
+    // Fruit center in basket zone?
+    const inX = f.x > bx - half - fr * 0.4 && f.x < bx + half + fr * 0.4;
+    const inY = f.y + fr > by && f.y - fr < by + 32;
+
+    if (inX && inY) {
+      state.fruits.splice(i, 1);
+      if (f.isRotten) {
+        // Rotten → instant game over
+        rottenCaught = true;
+        SFX.rotten();
+        spawnParticles(f.x, f.y, '#8bc34a', 16);
+        spawnPopup(f.x, f.y, '☠️ Rotten!', false);
+        triggerGameOver();
+      } else {
+        state.score += f.def.pts;
+        state.caught++;
+        SFX.catch();
+        spawnParticles(f.x, f.y, f.def.color, 12);
+        spawnPopup(f.x, f.y, '+' + f.def.pts);
+        checkLevelUp();
+        if (state.score > highScore) {
+          highScore = state.score;
+          localStorage.setItem('bbb_hs', highScore);
+        }
+        // Rabbit wobble
+        RABBIT.wobble = 8;
+        RABBIT.earWobble = 12;
+        updateHUD();
+      }
+      continue;
+    }
+
+    // Fruit passed bottom → missed
+    if (f.y - fr > PLAY_BOT && !f.isRotten) {
+      state.fruits.splice(i, 1);
+      state.missed++;
+      SFX.miss();
+      spawnPopup(f.x, PLAY_BOT - 30, '❌ Miss', false);
+      updateHUD();
+      if (state.missed >= MAX_MISSES) {
+        triggerGameOver();
+      }
+    } else if (f.y - fr > PLAY_BOT && f.isRotten) {
+      // Rotten fell off — safe, remove silently
+      state.fruits.splice(i, 1);
+    }
+  }
+}
+
+/* ============================================================
+   GAME OVER
+============================================================ */
+function triggerGameOver() {
+  running = false;
+  SFX.gameover();
+
+  if (state.score > highScore) {
+    highScore = state.score;
+    localStorage.setItem('bbb_hs', highScore);
+  }
+
+  // Populate Game Over screen
+  goScore.textContent = state.score;
+  goLevel.textContent = state.level;
+  goBest.textContent  = highScore;
+  goEmoji.textContent = rottenCaught ? '🤢' : '😢';
+  goTitle.textContent = rottenCaught ? 'Ugh!' : 'Game Over!';
+  rottenMsg.classList.toggle('hidden', !rottenCaught);
+
+  setTimeout(() => {
+    gameOverScreen.classList.remove('hidden');
+  }, 400);
+}
+
+/* ============================================================
+   INPUT
+============================================================ */
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyP' && running) togglePause();
+  // Start / Restart shortcuts
+  if (e.code === 'Space' || e.code === 'Enter') {
+    if (!gameStarted) startGame();
+  }
+  e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Mobile buttons
+leftBtn.addEventListener('touchstart',  e => { keys['ArrowLeft'] = true;  e.preventDefault(); }, { passive:false });
+leftBtn.addEventListener('touchend',    e => { keys['ArrowLeft'] = false; e.preventDefault(); }, { passive:false });
+rightBtn.addEventListener('touchstart', e => { keys['ArrowRight'] = true;  e.preventDefault(); }, { passive:false });
+rightBtn.addEventListener('touchend',   e => { keys['ArrowRight'] = false; e.preventDefault(); }, { passive:false });
+// Also mouse for desktop testing
+leftBtn.addEventListener('mousedown',  () => keys['ArrowLeft'] = true);
+leftBtn.addEventListener('mouseup',    () => keys['ArrowLeft'] = false);
+leftBtn.addEventListener('mouseleave', () => keys['ArrowLeft'] = false);
+rightBtn.addEventListener('mousedown',  () => keys['ArrowRight'] = true);
+rightBtn.addEventListener('mouseup',    () => keys['ArrowRight'] = false);
+rightBtn.addEventListener('mouseleave', () => keys['ArrowRight'] = false);
+
+function togglePause() {
+  paused = !paused;
+  pauseOverlay.classList.toggle('visible', paused);
+}
+
+/* ============================================================
+   CLOUDS (CSS managed)
+============================================================ */
+function generateClouds() {
+  const skyEl = document.getElementById('skyBg');
+  [
+    { w:110, h:38, top:10, dur:28, delay:0 },
+    { w: 80, h:28, top:22, dur:38, delay:-12 },
+    { w:130, h:44, top: 8, dur:22, delay:-5 },
+    { w: 70, h:24, top:30, dur:44, delay:-20 },
+  ].forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'cloud';
+    div.style.width  = c.w + 'px';
+    div.style.height = c.h + 'px';
+    div.style.top    = c.top + '%';
+    div.style.animationDuration  = c.dur + 's';
+    div.style.animationDelay     = c.delay + 's';
+    div.style.opacity = 0.55 + Math.random() * 0.3;
+    skyEl.appendChild(div);
+  });
+}
+generateClouds();
+
+/* ============================================================
+   DRAW FUNCTIONS
+============================================================ */
+
+// Rabbit drawn with canvas 2D shapes
+function drawRabbit(x, y, wobble, earWobble) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  const w = wobble;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 30 + Math.abs(w)*0.3, 8, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Basket (trapezoid)
+  ctx.fillStyle = '#8d6e63';
+  ctx.strokeStyle = '#5d4037';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-32, -18 + w*0.3);
+  ctx.lineTo( 32, -18 - w*0.3);
+  ctx.lineTo( 26, -2);
+  ctx.lineTo(-26, -2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Basket weave stripes
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1.5;
+  for (let i = -20; i <= 20; i += 10) {
+    ctx.beginPath();
+    ctx.moveTo(i - 32, -18 + w*0.3);
+    ctx.lineTo(i - 26 + 6, -2);
+    ctx.stroke();
+  }
+  // Basket rim
+  ctx.fillStyle = '#a1887f';
+  ctx.beginPath();
+  ctx.ellipse(0, -18, 34, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#6d4c41';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Body
+  const bodyY = -62 - Math.abs(w)*0.15;
+  ctx.fillStyle = '#f5f5f5';
+  ctx.beginPath();
+  ctx.ellipse(0, bodyY, 22, 26, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Tummy
+  ctx.fillStyle = '#fce4ec';
+  ctx.beginPath();
+  ctx.ellipse(0, bodyY + 8, 12, 16, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Head
+  const headY = bodyY - 28;
+  ctx.fillStyle = '#f5f5f5';
+  ctx.beginPath();
+  ctx.ellipse(0, headY, 19, 20, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Ears
+  const ew = earWobble;
+  ctx.fillStyle = '#f5f5f5';
+  ctx.save();
+  ctx.rotate(-0.12 - ew*0.015);
+  ctx.beginPath();
+  ctx.ellipse(-10, headY - 28, 7, 20, -0.15, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.rotate(0.12 + ew*0.015);
+  ctx.beginPath();
+  ctx.ellipse(10, headY - 28, 7, 20, 0.15, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // Inner ear
+  ctx.fillStyle = '#f8bbd0';
+  ctx.save();
+  ctx.rotate(-0.12 - ew*0.01);
+  ctx.beginPath();
+  ctx.ellipse(-10, headY - 28, 3.5, 13, -0.15, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.rotate(0.12 + ew*0.01);
+  ctx.beginPath();
+  ctx.ellipse(10, headY - 28, 3.5, 13, 0.15, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // Eyes
+  const blink = (Date.now() % 4000 < 180);
+  ctx.fillStyle = '#212121';
+  if (blink) {
+    ctx.fillRect(-8, headY - 4, 6, 2);
+    ctx.fillRect( 4, headY - 4, 6, 2);
+  } else {
+    ctx.beginPath();
+    ctx.arc(-6, headY - 4, 3.5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(6, headY - 4, 3.5, 0, Math.PI*2);
+    ctx.fill();
+    // Eye shine
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(-5, headY - 6, 1.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(7, headY - 6, 1.2, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Nose
+  ctx.fillStyle = '#e91e63';
+  ctx.beginPath();
+  ctx.arc(0, headY + 3, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cheeks
+  ctx.fillStyle = 'rgba(255,100,100,0.22)';
+  ctx.beginPath(); ctx.arc(-13, headY + 2, 7, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 13, headY + 2, 7, 0, Math.PI*2); ctx.fill();
+
+  // Arms
+  ctx.strokeStyle = '#f5f5f5';
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-20, bodyY);
+  ctx.lineTo(-30 - w*0.2, bodyY + 12);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(20, bodyY);
+  ctx.lineTo(30 + w*0.2, bodyY + 12);
+  ctx.stroke();
+
+  // Feet
+  ctx.fillStyle = '#f5f5f5';
+  ctx.beginPath();
+  ctx.ellipse(-13, bodyY + 23, 10, 6, -0.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(13, bodyY + 23, 10, 6, 0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// Draw emoji fruit with rotation
+function drawFruit(f) {
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.angle);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.1)';
+  ctx.beginPath();
+  ctx.ellipse(3, f.size*0.52, f.size*0.38, f.size*0.12, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Glow for rotten
+  if (f.isRotten) {
+    ctx.shadowColor = '#76ff03';
+    ctx.shadowBlur  = 16;
+  }
+
+  ctx.font = f.size + 'px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(f.def.emoji, 0, 0);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// Draw particles
+function drawParticles(dt) {
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.age += dt / 1000;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.15; // gravity
+    p.alpha = 1 - p.age / p.life;
+    if (p.alpha <= 0) { state.particles.splice(i, 1); continue; }
+
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle   = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur  = 6;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (1 - p.age/p.life*0.5), 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* ============================================================
+   MAIN GAME LOOP
+============================================================ */
+function gameLoop(ts) {
+  if (!running) return;
+  animFrame = requestAnimationFrame(gameLoop);
+
+  const delta = Math.min(ts - lastTime, 80); // cap at 80ms to avoid spiral
+  lastTime = ts;
+
+  if (paused) return;
+
+  // --- Update ---
+  // Rabbit movement
+  const HALF_R = RABBIT.w / 2;
+  if (keys['ArrowLeft'])  RABBIT.vx = -RABBIT.speed;
+  else if (keys['ArrowRight']) RABBIT.vx = RABBIT.speed;
+  else RABBIT.vx *= 0.75; // friction
+
+  RABBIT.x += RABBIT.vx;
+  RABBIT.x = Math.max(HALF_R, Math.min(CANVAS_W - HALF_R, RABBIT.x));
+
+  // Dampen wobble
+  RABBIT.wobble    *= 0.82;
+  RABBIT.earWobble *= 0.78;
+
+  // Fruits
+  spawnFruit(delta);
+  const t = ts * 0.001;
+  for (const f of state.fruits) {
+    f.y     += f.speed * (delta / 16);
+    f.angle += f.spin;
+    f.x     += Math.sin(t * f.wobbleSpd * 60 + f.wobbleSin) * 0.35 * f.wobbleAmp * (delta / 400);
+    f.x      = Math.max(f.size/2, Math.min(CANVAS_W - f.size/2, f.x));
+  }
+
+  checkCollisions();
+
+  // --- Draw ---
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  // Fruits
+  for (const f of state.fruits) drawFruit(f);
+
+  // Rabbit
+  drawRabbit(RABBIT.x, RABBIT.y, RABBIT.wobble, RABBIT.earWobble);
+
+  // Particles
+  drawParticles(delta);
+}
+
+/* ============================================================
+   START / RESTART
+============================================================ */
+function startGame() {
+  getCtx(); // unlock audio
+  gameStarted = true;
+  startScreen.classList.add('hidden');
+  gameOverScreen.classList.add('hidden');
+  pauseOverlay.classList.remove('visible');
+
+  initState();
+  updateHUD();
+
+  // Reset sky
+  const theme = SKY_THEMES[0];
+  skyBg.style.background = `linear-gradient(175deg, ${theme.a} 0%, ${theme.b} 100%)`;
+
+  running = true;
+  paused  = false;
+  lastTime = performance.now();
+  if (animFrame) cancelAnimationFrame(animFrame);
+  animFrame = requestAnimationFrame(gameLoop);
+}
+
+startBtn.addEventListener('click',   startGame);
+restartBtn.addEventListener('click', startGame);
+menuBtn.addEventListener('click', () => {
+  running = false;
+  gameStarted = false;
+  gameOverScreen.classList.add('hidden');
+  startScreen.classList.remove('hidden');
+});
+
+// Set initial high score in HUD
+hudHigh.textContent = highScore;
+</script>
+</body>
+</html>
